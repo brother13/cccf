@@ -1,0 +1,12 @@
+node_modules/
+public/
+runtime/
+qcloudsms/
+.DS_Store
+dist/
+build/
+.env
+.env.local
+*.log
+.vscode/
+.idea/

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>plapi</title>
+  </head>
+  <script  src="js/jquery.js"></script>
+  <script  src="js/wk.js"></script>
+  <body>
+    <div id="output">erro</div>
+	<script  >
+		$(document).ready(function() {
+		 var settings = {
+		    "url": "https://v-box.net/box-web/api/user/signin",
+		    "method": "POST",
+		    "timeout": 0,
+		    "headers": {
+		       "common": " {\"cuid\":\"123456789\",\"pid\":\"2\",\"sv\":\"1.0\",\"ts\":1703474220000,\"mt\":1,\"lan\":\"zh\",\"sign\":\"974522d4f34913e1fc71ad56044030c7\"}",
+
+		    },
+		    "data": {
+		       "alias": "CDHLT1",
+		       "password": "e10adc3949ba59abbe56e057f20f883e",
+		       "isremeber": "1"
+		    }
+		 };
+		 
+		 $.ajax(settings).done(function (response) {
+		    console.log(response);
+			var ret=JSON.parse(response)
+			if(ret['code']==200){
+				var sid=ret['result']['sid']
+				document.getElementById('output').innerHTML =$.api1(sid)
+				//$("#app1").text(token);
+			}			
+		 });   			
+		});	
+	</script>
+  </body>
+</html>

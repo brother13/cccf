@@ -1,0 +1,47 @@
+{
+    "name": "topthink/think",
+    "description": "the new thinkphp framework",
+    "type": "project",
+    "keywords": [
+        "framework",
+        "thinkphp",
+        "ORM"
+    ],
+    "homepage": "http://thinkphp.cn/",
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "liu21st",
+            "email": "liu21st@gmail.com"
+        }
+    ],
+    "require": {
+        "php": ">=5.4.0",
+        "topthink/framework": "5.0.*",
+        "phpoffice/phpspreadsheet": "^1.10",
+        "phpoffice/phpword": "^0.17.0",
+        "topthink/think-image": "^1.0",
+        "cboden/ratchet": "^0.4.4",
+        "react/react": "^1.4"
+    },
+    "autoload": {
+        "psr-4": {
+            "app\\": "application"
+        }
+    },
+    "extra": {
+        "think-path": "thinkphp"
+    },
+    "config": {
+        "preferred-install": "dist",
+        "allow-plugins": {
+            "topthink/think-installer": true
+        }
+    },
+    "repositories": {
+        "packagist": {
+            "type": "composer",
+            "url": "https://mirrors.aliyun.com/composer/"
+        }
+    }
+}
