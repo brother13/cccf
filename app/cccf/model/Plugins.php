@@ -104,8 +104,11 @@ class Plugins extends Courtcase
             case 'tklist':
                 $rt = $this->queryList_tk($data);
                 break;
-            case 'countCasenum': 
+            case 'countCasenum':
                 $rt = $this->countCasenum($data);
+                break;
+            case 'queryList_sk_direct':
+                $rt = $this->queryList_sk_direct($data);
                 break;
             default:
                 $rt['message'] = "操作【/" . self::ACTION . "/{$action}】并不存在！";
@@ -1163,6 +1166,121 @@ class Plugins extends Courtcase
         $rt['code'] = self::CODE_SUCCESS;
         $rt['message'] = 'OK';
         $rt['data'] = $count;
+        return $rt;
+    }
+
+    /**
+     * 判断当前用户是否是管理员
+     * 根据用户组判断，groupid=6为管理员组
+     *
+     * @return bool
+     */
+    protected function isAdmin()
+    {
+        $usergroup = $this->userinfo['usergroup'] ?? '';
+        if (empty($usergroup)) {
+            return false;
+        }
+        // usergroup 可能是逗号分隔的多个组ID
+        $groups = explode(',', $usergroup);
+        // 检查是否包含管理员组ID (6)
+        return in_array('6', $groups) || in_array(6, $groups);
+    }
+
+    /**
+     * 直接从admin_shoukuan表获取代管款数据（不创建临时表）
+     *
+     * @param array $param
+     * @return array
+     */
+    protected function queryList_sk_direct($param = [])
+    {
+        $rt = $this->_rt();
+
+        $keyword = $param['keyword'] ?? '';
+        $yhstatus = $param['yhstatus'] ?? 0;  // 是否延缓：1-无延缓，2-有延缓
+        $cqstatus = $param['cqstatus'] ?? 0;  // 超期情况：1-未超期，2-即将超期，3-已超期
+
+        $page = $param['page'] ?? 1;
+        $pagesize = $param['pagesize'] ?? 10;
+
+        $table = self::TABLE_ADMIN_SHOUKUAN;
+
+        $where = [];
+        $where['dwid'] = $this->dwid;
+
+        // 非管理员只能查询自己的数据（根据用户组判断，groupid=1为管理员组）
+        if (!$this->isAdmin()) {
+            $where['cbr'] = $this->userinfo['username'] ?? '';
+        }
+
+        // 模糊搜索
+        if (!empty($keyword)) {
+            $where['ah|cbr|yg|bg|ay|ly'] = ['like', '%' . $keyword . '%'];
+        }
+
+        // 是否延缓筛选
+        if (!empty($yhstatus)) {
+            if ($yhstatus == 1) {
+                $where['_yhzt_'] = Db::raw("(length(yh_zt)<1 or yh_zt is null)");
+            } else if ($yhstatus == 2) {
+                $where['_yhzt_'] = Db::raw("length(yh_zt)>1");
+            }
+        }
+
+        // 超期情况筛选
+        if (!empty($cqstatus)) {
+            switch ($cqstatus) {
+                case 1: // 未超期
+                    $where['leftdays'] = ['>', 5];
+                    break;
+                case 2: // 即将超期（5天内）
+                    $where['leftdays'] = ['between', [0, 5]];
+                    break;
+                case 3: // 已超期
+                    $where['leftdays'] = ['<', 0];
+                    break;
+            }
+        }
+
+        // je和ye字段是varchar类型，存储格式为"395,334.00"，需要去除逗号
+        $field = [
+            'ly', 'ah', 'cbr',
+            Db::raw("REPLACE(je, ',', '') as je"),
+            Db::raw("REPLACE(ye, ',', '') as ye"),
+            'jzdate',
+            'yh_zt', 'yh_reason', 'yh_enddate',
+            'ay', 'yg', 'bg',
+            'days', 'leftdays'
+        ];
+
+        // 获取统计数据（记录数、到账金额总和、余额总和）
+        $statField = [
+            'count(*)' => 'num',
+            Db::raw("SUM(REPLACE(je, ',', '')) as je"),
+            Db::raw("SUM(REPLACE(ye, ',', '')) as ye")
+        ];
+        $stat = $this->getdb($table)->where($where)->field($statField)->find();
+
+        $total = $stat['num'] ?? 0;
+        $data = $this->getdb($table)
+            ->where($where)
+            ->field($field)
+            ->page($page, $pagesize)
+            ->order('jzdate desc')
+            ->select();
+
+        $newdata = [];
+        $newdata['total'] = [
+            'num' => intval($stat['num'] ?? 0),
+            'je' => $stat['je'] ?? 0,
+            'ye' => $stat['ye'] ?? 0
+        ];
+        $newdata['items'] = $data;
+
+        $rt['code'] = self::CODE_SUCCESS;
+        $rt['message'] = 'OK';
+        $rt['data'] = $newdata;
         return $rt;
     }
 }
