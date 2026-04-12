@@ -64,6 +64,7 @@ return [
         'txcl' => [
             ['label' => "冻结文书", 'icon' => 'el-icon-download', 'file' => "冻结.docx"],
             ['label' => "扣划文书", 'icon' => 'el-icon-download', 'file' => "扣划.docx"],
+            ['label' => "续封告知书", 'icon' => 'el-icon-download', 'file' => "告知书.docx"],
 
         ]
     ]

@@ -17,6 +17,9 @@ use app\cccf\model\Test;
 use app\cccf\model\Plugins;
 use app\cccf\model\Thqd;
 use app\cccf\model\Dkp;
+use app\cccf\model\Lixijs;
+use app\cccf\model\Lpr;
+use app\cccf\model\Benchmark;
 use app\cccf\model\Update;
 //测试用的
 use app\cccf\model\User;
@@ -91,6 +94,18 @@ class Index extends Controller
                 break;
             case 'dkp': //待开收据
                 $model = new Dkp();
+                $data = $model->index($action_arr[2], $postdata);
+                break;
+            case 'lixijs': //利息计算
+                $model = new Lixijs();
+                $data = $model->index($action_arr[2], $postdata);
+                break;
+            case 'lpr': //LPR利率
+                $model = new Lpr();
+                $data = $model->index($action_arr[2], $postdata);
+                break;
+            case 'benchmark': //贷款基准利率
+                $model = new Benchmark();
                 $data = $model->index($action_arr[2], $postdata);
                 break;
             case 'cfcc': //系统相关信息
