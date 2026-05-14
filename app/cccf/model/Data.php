@@ -586,8 +586,8 @@ class Data extends Common
 
     public function savecccfall($data)
     {
-        $field = ['cbr', 'ah', 'sqzxr', 'bzxr', 'type', 'status', 'startdate', 'enddate', 'note', 'username', 'ccqk', 'isvoid', 'ycbr'];
-        $fieldName = ['承办人', '案号', '申请执行人', '被执行人', '财产类型', '查封状态', '查封生效日期', '查封届满日期', '备注', '操作员', '类型及控制财产情况', '是否停用', '原承办人'];
+        $field = ['cbr', 'ah', 'sqzxr', 'bzxr', 'type', 'cfsf', 'startdate', 'enddate', 'note', 'username', 'ccqk', 'isvoid', 'ycbr', 'sqzxr'];
+        $fieldName = ['承办人', '案号', '申请执行人', '被执行人', '财产类型', '查封状态', '查封生效日期', '查封届满日期', '备注', '操作员', '财产情况', '是否停用', '原承办人', '申请人'];
         $jsondata = $data['data'];
         $myusername = $data['myusername'];
         $cnum = 0;
@@ -1135,10 +1135,14 @@ class Data extends Common
 
         $order = $datekeyword . " ,ah";
         $field = ['djcode', 'dzdate', 'cqts', 'ah', 'FORMAT(sje,2) sje', 'FORMAT(tje,2) tje', 'FORMAT(ye,2) ye', 'cbr'];
-        $num = $this->getdb('djye_v')->where($where)->count();
-        $_count = $this->getdb('djye_v')->where($where)->field("count(1) as cnum,FORMAT(sum(sje),2) as sje,FORMAT(sum(tje),2) as tje ,FORMAT(sum(ye),2) as ye")->find();
-        $data = $this->getdb('djye_v')->where($where)->field($field)->order($order)->page($page, $pagesize)->select();
-        $alldata = $this->getdb('djye_v')->where($where)->field($field)->order($order)->page(1, $num)->select();
+        // $num = $this->getdb('djye_v')->where($where)->count();
+        // $_count = $this->getdb('djye_v')->where($where)->field("count(1) as cnum,FORMAT(sum(sje),2) as sje,FORMAT(sum(tje),2) as tje ,FORMAT(sum(ye),2) as ye")->find();
+        // $data = $this->getdb('djye_v')->where($where)->field($field)->order($order)->page($page, $pagesize)->select();
+        // $alldata = $this->getdb('djye_v')->where($where)->field($field)->order($order)->page(1, $num)->select();
+        $num = 0;
+        $_count = [];
+        $data = [];
+        $alldata = [];
 
         $rt = [];
         $rt['code'] = 20000;

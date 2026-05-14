@@ -10,3 +10,4 @@ build/
 *.log
 .vscode/
 .idea/
+*.sql

@@ -110,6 +110,9 @@ class Plugins extends Courtcase
             case 'queryList_sk_direct':
                 $rt = $this->queryList_sk_direct($data);
                 break;
+            case 'queryList_sk_tk_summary':
+                $rt = $this->queryList_sk_tk_summary($data);
+                break;
             default:
                 $rt['message'] = "操作【/" . self::ACTION . "/{$action}】并不存在！";
         }
@@ -1151,14 +1154,14 @@ class Plugins extends Courtcase
 
         $where['_exp_'] = Db::raw("(length(yh_enddate)<1 or yh_enddate is null)");
 
-        $count['new10day'] = $this->getdb(self::TABLE_ADMIN_SHOUKUAN)->where($where)->count();
+        $count['new10day'] = $this->getdb('shoukuan_ye')->where($where)->count();
 
         $where['_exp_'] = Db::raw("(length(yh_enddate)>1 )");
         unset($where['days']);
         $where['leftdays'] = ['<=', self::DGK_ALERT_LEFTDAYS_AKYH];
-        
 
-        $count['akyh5day'] = $this->getdb(self::TABLE_ADMIN_SHOUKUAN)->where($where)->count();
+
+        $count['akyh5day'] = $this->getdb('shoukuan_ye')->where($where)->count();
 
 
 
@@ -1204,7 +1207,7 @@ class Plugins extends Courtcase
         $page = $param['page'] ?? 1;
         $pagesize = $param['pagesize'] ?? 10;
 
-        $table = self::TABLE_ADMIN_SHOUKUAN;
+        $table = 'shoukuan_ye';
 
         $where = [];
         $where['dwid'] = $this->dwid;
@@ -1274,6 +1277,356 @@ class Plugins extends Courtcase
         $newdata['total'] = [
             'num' => intval($stat['num'] ?? 0),
             'je' => $stat['je'] ?? 0,
+            'ye' => $stat['ye'] ?? 0
+        ];
+        $newdata['items'] = $data;
+
+        $rt['code'] = self::CODE_SUCCESS;
+        $rt['message'] = 'OK';
+        $rt['data'] = $newdata;
+        return $rt;
+    }
+
+    /**
+     * 获取执行款台账汇总表临时表名
+     *
+     * @return string
+     */
+    public function getTablename_sk_tk_summary()
+    {
+        $table = config("database.prefix") . "temp_sk_tk_summary";
+        return $table;
+    }
+
+    /**
+     * 计算两个日期之间的工作日天数（排除周末）
+     *
+     * @param string $start_date
+     * @param string $end_date
+     * @return int|null
+     */
+    private function calcWorkDays($start_date, $end_date)
+    {
+        if (empty($start_date) || empty($end_date)) {
+            return null;
+        }
+
+        $start = strtotime($start_date);
+        $end = strtotime($end_date);
+
+        if ($start === false || $end === false || $end < $start) {
+            return null;
+        }
+
+        $workdays = 0;
+        $current = $start;
+
+        while ($current <= $end) {
+            $weekday = date('w', $current);
+            if ($weekday != 0 && $weekday != 6) {
+                $workdays++;
+            }
+            $current = strtotime('+1 day', $current);
+        }
+
+        return $workdays;
+    }
+
+    /**
+     * 创建执行款台账汇总表临时表
+     *
+     * @param array $param
+     * @return array
+     */
+    protected function _createtemp_sk_tk_summary($param = [])
+    {
+        $rt = $this->_rt();
+        $endtime = $param['endtime'] ?? date('Y-m-d');
+        if (!empty($endtime) && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $endtime)) {
+            $endtime = date('Y-m-d');
+        }
+        $force = !empty($param['force']);
+        $dwid = $this->dwid ?? 0;
+
+        $prefix = config("database.prefix") ?? 'court_';
+        $table = $this->getTablename_sk_tk_summary();
+        $table_tk_sum = $table . '_tk';
+        $table_sk = $prefix . self::TABLE_ADMIN_SHOUKUAN;
+        $table_tk = $prefix . self::TABLE_ADMIN_TUIKUAN;
+
+        // 缓存检查：临时表存在且 endtime 匹配，直接复用（force 时跳过）
+        if (!$force) {
+            try {
+                $cached = $this->getdb()->table($table)->field('endtime')->find();
+                if (!empty($cached) && $cached['endtime'] === $endtime) {
+                    $rt['code'] = self::CODE_SUCCESS;
+                    $rt['message'] = 'OK (cached)';
+                    $rt['data'] = ['table' => str_replace($prefix, '', $table), 'cached' => true];
+                    return $rt;
+                }
+            } catch (\Exception $e) {
+                // 表不存在，继续创建
+            }
+        }
+
+        ini_set('max_execution_time', 600);
+
+        $sqls = [];
+
+        // 1. 清理旧临时表
+        $sqls[] = "DROP TABLE IF EXISTS {$table_tk_sum}";
+        $sqls[] = "DROP TABLE IF EXISTS {$table}";
+
+        // 2. 创建收款汇总临时表
+        $sqls[] = "CREATE TABLE {$table} AS
+            SELECT
+                djcode, ah, MIN(dzdate) AS dzdate, SUM(CAST(REPLACE(IFNULL(jzje, '0'), ',', '') AS DECIMAL(18,2))) AS sk_je,
+                GROUP_CONCAT(DISTINCT dsr) AS dsr, MAX(cbbm) AS cbbm,
+                MAX(cbr) AS cbr, MAX(sjy) AS sjy, MAX(yg) AS yg,
+                MAX(bg) AS bg, MAX(ay) AS ay,
+                0 AS tk_je, '' AS czdate, 0 AS ye,
+                '' AS skr, '' AS skr_bank, '' AS skr_account,
+                0 AS workdays, '{$endtime}' AS endtime
+            FROM {$table_sk}
+            WHERE dwid={$dwid} AND dzdate<='{$endtime}'
+            GROUP BY djcode, ah";
+
+        // 3. 修改列类型（允许NULL）并添加自增ID、索引
+        $sqls[] = "ALTER TABLE {$table} MODIFY COLUMN czdate VARCHAR(20)";
+        $sqls[] = "ALTER TABLE {$table} MODIFY COLUMN skr VARCHAR(255)";
+        $sqls[] = "ALTER TABLE {$table} MODIFY COLUMN skr_bank VARCHAR(255)";
+        $sqls[] = "ALTER TABLE {$table} MODIFY COLUMN skr_account VARCHAR(255)";
+        $sqls[] = "ALTER TABLE {$table} ADD COLUMN id INT AUTO_INCREMENT PRIMARY KEY FIRST";
+        $sqls[] = "ALTER TABLE {$table} ADD INDEX idx_djcode_ah (djcode, ah)";
+        $sqls[] = "ALTER TABLE {$table} ADD INDEX idx_workdays (workdays)";
+
+        // 4. 创建退款汇总中间表（djcode 不为空的，按 djcode+ah 分组）
+        $sqls[] = "CREATE TABLE {$table_tk_sum} AS
+            SELECT
+                djcode, ah,
+                SUM(CAST(REPLACE(IF(je='' OR je IS NULL, '0', je), ',', '') AS DECIMAL(18,2))) AS tk_je,
+                MAX(czdate) AS czdate
+            FROM {$table_tk}
+            WHERE dwid={$dwid} AND czdate<='{$endtime}' AND djcode != '' AND djcode IS NOT NULL
+            GROUP BY djcode, ah";
+        $sqls[] = "ALTER TABLE {$table_tk_sum} ADD INDEX idx_djcode_ah (djcode, ah)";
+
+        // 5. JOIN UPDATE 第一步：djcode+ah 匹配（处理 djcode 不为空的退款）
+        $sqls[] = "UPDATE {$table} s
+            LEFT JOIN {$table_tk_sum} t ON s.djcode=t.djcode AND s.ah=t.ah
+            SET s.tk_je = COALESCE(t.tk_je, 0), s.czdate = COALESCE(t.czdate, '')";
+
+        // 5b. JOIN UPDATE 第二步：ah 匹配（处理 djcode 为空的退款，累积加到同案号记录）
+        $sqls[] = "UPDATE {$table} s
+            LEFT JOIN (
+                SELECT ah,
+                    SUM(CAST(REPLACE(IF(je='' OR je IS NULL, '0', je), ',', '') AS DECIMAL(18,2))) AS tk_je,
+                    MAX(czdate) AS czdate
+                FROM {$table_tk}
+                WHERE dwid={$dwid} AND czdate<='{$endtime}' AND (djcode = '' OR djcode IS NULL)
+                GROUP BY ah
+            ) t ON s.ah=t.ah
+            SET s.tk_je = s.tk_je + COALESCE(t.tk_je, 0),
+                s.czdate = IF(t.czdate IS NOT NULL AND (t.czdate > s.czdate OR s.czdate = ''), t.czdate, s.czdate)";
+
+        // 6. 计算余额
+        $sqls[] = "UPDATE {$table} SET ye = sk_je - tk_je";
+
+        // 7. 收款人信息（只对 tk_je>0 的记录，减少子查询次数）
+        $sqls[] = "UPDATE {$table} s SET
+            skr = (SELECT t.skr FROM {$table_tk} t
+                WHERE t.dwid={$dwid}
+                AND t.djcode=s.djcode AND t.ah=s.ah AND t.czdate<='{$endtime}'
+                ORDER BY t.czdate DESC LIMIT 1)
+            WHERE s.tk_je > 0";
+
+        $sqls[] = "UPDATE {$table} s SET
+            skr_bank = (SELECT t.skr_bank FROM {$table_tk} t
+                WHERE t.dwid={$dwid}
+                AND t.djcode=s.djcode AND t.ah=s.ah AND t.czdate<='{$endtime}'
+                ORDER BY t.czdate DESC LIMIT 1)
+            WHERE s.tk_je > 0";
+
+        $sqls[] = "UPDATE {$table} s SET
+            skr_account = (SELECT t.skr_account FROM {$table_tk} t
+                WHERE t.dwid={$dwid}
+                AND t.djcode=s.djcode AND t.ah=s.ah AND t.czdate<='{$endtime}'
+                ORDER BY t.czdate DESC LIMIT 1)
+            WHERE s.tk_je > 0";
+
+        // 8. 清理中间表
+        $sqls[] = "DROP TABLE IF EXISTS {$table_tk_sum}";
+
+        $exectime = [];
+        foreach ($sqls as $index => $_sql) {
+            $key_start = "sql_{$index}_start";
+            Debug::remark($key_start);
+            $message = "OK";
+
+            try {
+                $this->getdblink()->execute($_sql);
+            } catch (\Exception $e) {
+                $err = $e->getMessage();
+                if (!json_encode($err)) {
+                    $err = _cv_gbk_to_utf8($err);
+                }
+                $message = $err;
+            }
+
+            $key_end = "sql_{$index}_end";
+            Debug::remark($key_end);
+            $time = Debug::getRangeTime($key_start, $key_end);
+            $exectime[] = [
+                'sql' => $_sql,
+                'index' => $index,
+                'time' => $time,
+                'message' => $message
+            ];
+        }
+
+        // 9. PHP 遍历计算停留时间（工作日），批量 UPDATE
+        try {
+            $today = date('Y-m-d');
+            $rows = $this->getdb()->table($table)->field('id,dzdate,czdate')->select();
+            $cases = [];
+            foreach ($rows as $row) {
+                $end = !empty($row['czdate']) ? $row['czdate'] : $today;
+                $wd = $this->calcWorkDays($row['dzdate'], $end);
+                if ($wd !== null) {
+                    $cases[] = "WHEN {$row['id']} THEN {$wd}";
+                }
+            }
+            if (!empty($cases)) {
+                $sql = "UPDATE {$table} SET workdays = CASE id " . implode(' ', $cases) . " ELSE workdays END";
+                $this->getdblink()->execute($sql);
+            }
+        } catch (\Exception $e) {
+            $exectime[] = [
+                'sql' => 'calcWorkDays',
+                'message' => $e->getMessage()
+            ];
+        }
+
+        $info = [];
+        $info['table'] = str_replace($prefix, '', $table);
+        $info['exectime'] = $exectime;
+
+        $rt['code'] = self::CODE_SUCCESS;
+        $rt['message'] = 'OK';
+        $rt['data'] = $info;
+        return $rt;
+    }
+
+    /**
+     * 执行款台账汇总表查询
+     *
+     * @param array $param
+     * @return array
+     */
+    protected function queryList_sk_tk_summary($param = [])
+    {
+        $rt = $this->_rt();
+
+        $keyword = $param['keyword'] ?? '';
+        $cbr = $param['cbr'] ?? '';
+        $starttime = $param['starttime'] ?? '';
+        $endtime = $param['endtime'] ?? '';
+        $datetype = $param['datetype'] ?? 'dzdate';
+        $days_range = $param['days_range'] ?? '';
+        $balance_filter = $param['balance_filter'] ?? '';
+        $balance_endtime = $param['balance_endtime'] ?? '';
+        $force_recalc = !empty($param['force_recalc']);
+        $page = intval($param['page'] ?? 1);
+        $pagesize = intval($param['pagesize'] ?? 10);
+        $sort = $param['sort'] ?? '';
+
+        $prefix = config("database.prefix") ?? 'court_';
+        $table_full = $this->getTablename_sk_tk_summary();
+        $table = str_replace($prefix, '', $table_full);
+
+        // 验证余额截止日期格式
+        if (!empty($balance_endtime) && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $balance_endtime)) {
+            $balance_endtime = '';
+        }
+
+        // 先创建/刷新临时表（使用余额截止日期）
+        $tempResult = $this->_createtemp_sk_tk_summary(['endtime' => $balance_endtime ?: date('Y-m-d'), 'force' => $force_recalc]);
+        if ($tempResult['code'] != self::CODE_SUCCESS) {
+            $rt['message'] = '创建临时表失败: ' . $tempResult['message'];
+            return $rt;
+        }
+
+        // 构建查询条件
+        $where = [];
+
+        // 非管理员只能查自己的数据
+        if (!$this->isAdmin()) {
+            $where['cbr'] = $this->userinfo['username'] ?? '';
+        } elseif (!empty($cbr)) {
+            $where['cbr'] = ['like', '%' . $cbr . '%'];
+        }
+
+        // 关键字模糊搜索
+        if (!empty($keyword)) {
+            $where['ah|dsr|ay|cbr'] = ['like', '%' . $keyword . '%'];
+        }
+
+        // 日期范围
+        $datefield = ($datetype === 'czdate') ? 'czdate' : 'dzdate';
+        $where_date = $this->_where_date($starttime, $endtime, false);
+        if ($where_date) {
+            $where[$datefield] = $where_date;
+        }
+
+        // 停留时间筛选
+        if ($days_range !== '') {
+            $where['workdays'] = ['>', intval($days_range)];
+        }
+
+        // 余额筛选
+        if ($balance_filter !== '') {
+            if ($balance_filter === '0') {
+                $where['ye'] = 0;
+            } else {
+                $where['ye'] = ['neq', 0];
+            }
+        }
+
+        // 排序
+        $order = 'dzdate desc';
+        if (!empty($sort)) {
+            $order = $sort;
+        }
+
+        // 统计信息
+        $statField = [
+            'count(*)' => 'num',
+            'sum(sk_je)' => 'sk_je',
+            'sum(tk_je)' => 'tk_je',
+            'sum(ye)' => 'ye'
+        ];
+        $stat = $this->getdb($table)->where($where)->field($statField)->find();
+
+        // 分页查询
+        $field = [
+            'id', 'djcode', 'ah', 'dzdate', 'czdate',
+            'sk_je', 'tk_je', 'ye',
+            'workdays', 'dsr', 'cbr', 'cbbm', 'sjy',
+            'yg', 'bg', 'ay', 'skr', 'skr_bank', 'skr_account'
+        ];
+
+        $data = $this->getdb($table)
+            ->where($where)
+            ->field($field)
+            ->page($page, $pagesize)
+            ->order($order)
+            ->select();
+
+        $newdata = [];
+        $newdata['total'] = [
+            'num' => intval($stat['num'] ?? 0),
+            'sk_je' => $stat['sk_je'] ?? 0,
+            'tk_je' => $stat['tk_je'] ?? 0,
             'ye' => $stat['ye'] ?? 0
         ];
         $newdata['items'] = $data;

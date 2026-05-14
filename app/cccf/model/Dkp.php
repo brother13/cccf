@@ -7,7 +7,7 @@ use think\Db;
 class Dkp extends Common
 {
     // 表名（不含前缀，前缀由数据库配置自动添加）
-    const TABLE_NAME = 'dkp';
+    const TABLE_NAME = 'shoukuan_dkp';
 
     /**
      * 主入口方法

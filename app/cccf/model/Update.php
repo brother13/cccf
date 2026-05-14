@@ -119,6 +119,7 @@ class Update extends Courtcase
 
 
         $table_shoukuan = "admin_shoukuan";
+        $table_shoukuan_ye = "admin_shoukuan_ye";
         $table_tuikuan = "admin_tuikuan";
         $table_ajjbxx = "admin_ajjbxx";
 
@@ -131,6 +132,7 @@ class Update extends Courtcase
 
         $adddays = 15; // 默认增加15天
         $sqls[] = "UPDATE {$table_shoukuan} s,{$table_ajjbxx} a SET s.zxyj=a.zxyj,s.ay=a.ay,s.labd=a.labd,s.larq=a.larq WHERE a.ah=s.ah AND s.zxyj IS NULL;";
+        $sqls[] = "UPDATE {$table_shoukuan_ye} s,{$table_ajjbxx} a SET s.zxyj=a.zxyj,s.ay=a.ay,s.labd=a.labd,s.larq=a.larq WHERE a.ah=s.ah AND s.zxyj IS NULL;";
         $sqls[] = "UPDATE {$table_tuikuan} s,{$table_ajjbxx} a SET s.zxyj=a.zxyj,s.ay=a.ay,s.labd=a.labd,s.larq=a.larq WHERE a.ah=s.ah AND s.zxyj IS NULL;";
 
         // 计算结束时间
@@ -139,25 +141,26 @@ class Update extends Courtcase
         // 如果yh_enddate不为空的
         // enddate+15天
         // $sqls[] = "update {$table_shoukuan} set enddate=date_add(enddate,interval {$adddays} day) where enddate is not null and length(enddate)>1 and enddate<>yh_enddate";
-        $sqls[] = "update {$table_shoukuan} set calctime = '{$today}',enddate=date_add(dzdate,interval {$adddays} day),days=DATEDIFF(dzdate,'{$today}') where (calctime <>'{$today}' or calctime is null) and length(yh_enddate)<1 ";
+        $sqls[] = "update {$table_shoukuan_ye} set calctime = '{$today}',enddate=date_add(dzdate,interval {$adddays} day),days=DATEDIFF(dzdate,'{$today}') where (calctime <>'{$today}' or calctime is null) and length(yh_enddate)<1 ";
 
         // 计算结束时间
-        $sqls[] = "update {$table_shoukuan} set leftdays=DATEDIFF(enddate,'{$today}') where nvl(leftdays,0)<>DATEDIFF(enddate,'{$today}') or leftdays is null";
+        $sqls[] = "update {$table_shoukuan_ye} set leftdays=DATEDIFF(enddate,'{$today}') where nvl(leftdays,0)<>DATEDIFF(enddate,'{$today}') or leftdays is null";
 
 
         // 刷新days，持有时间
-        $sqls[] = "update {$table_shoukuan} set days=DATEDIFF('{$today}',dzdate) where nvl(days,0)<>DATEDIFF('{$today}',dzdate) or days is null";
+        $sqls[] = "update {$table_shoukuan_ye} set days=DATEDIFF('{$today}',dzdate) where nvl(days,0)<>DATEDIFF('{$today}',dzdate) or days is null";
 
 
 
         // 刷新原告被告
         $sqls[] = "update {$table_shoukuan} set yg=SUBSTRING_INDEX(dsr, ';', 1),bg=SUBSTRING_INDEX(dsr, ';', -1) where dsr is not null and (yg is null or bg is null);";
+        $sqls[] = "update {$table_shoukuan_ye} set yg=SUBSTRING_INDEX(dsr, ';', 1),bg=SUBSTRING_INDEX(dsr, ';', -1) where dsr is not null and (yg is null or bg is null);";
         $sqls[] = "update {$table_tuikuan} set yg=SUBSTRING_INDEX(dsr, ';', 1),bg=SUBSTRING_INDEX(dsr, ';', -1) where dsr is not null and (yg is null or bg is null);";
 
 
         // 刷新备注信息
         // 收款表的
-        $sqls[] = "update {$table_shoukuan} s,{$table_dgknote} t set s.othernote=t.note,s.othernote_time=t.updatetime,s.othernote_user=t.username where s.ah=t.caseinfo and s.djcode=t.billno and s.dzdate=t.bankdate and t.st='sk';";
+        $sqls[] = "update {$table_shoukuan_ye} s,{$table_dgknote} t set s.othernote=t.note,s.othernote_time=t.updatetime,s.othernote_user=t.username where s.ah=t.caseinfo and s.djcode=t.billno and s.dzdate=t.bankdate and t.st='sk';";
         // 退款表
         $sqls[] = "update {$table_tuikuan} s,{$table_dgknote} t set s.othernote=t.note,s.othernote_time=t.updatetime,s.othernote_user=t.username where s.ah=t.caseinfo and s.djcode=t.billno and s.czdate=t.bankdate and t.st='tk';";
 
@@ -167,12 +170,12 @@ class Update extends Courtcase
 
         // 全案延缓
 
-        $sqls[] = "UPDATE {$table_shoukuan} s ,{$table_akyh} t SET s.yh_reason=t.yhreason WHERE s.ah=t.ah  AND  nvl(s.yh_reason,'')<>nvl(t.yhreason,'') AND t.yhlx='全案延缓' AND t.yhzt='延缓';";
+        $sqls[] = "UPDATE {$table_shoukuan_ye} s ,{$table_akyh} t SET s.yh_reason=t.yhreason WHERE s.ah=t.ah  AND  nvl(s.yh_reason,'')<>nvl(t.yhreason,'') AND t.yhlx='全案延缓' AND t.yhzt='延缓';";
         // 单笔延缓，需要根据案号+金额匹配
         $sqls[] = "UPDATE {$table_shoukuan} s ,{$table_akyh} t SET s.yh_reason=t.yhreason WHERE s.ah=t.ah AND s.je=t.je AND  nvl(s.yh_reason,'')<>nvl(t.yhreason,'') AND t.yhlx='单笔延缓' AND t.yhzt='延缓';";
 
         // 全案延缓，根据案号匹配
-        $sqls[] = "update {$table_shoukuan} set yh_reason=null where yh_reason='0' ";
+        $sqls[] = "update {$table_shoukuan_ye} set yh_reason=null where yh_reason='0' ";
 
         return $this->updateSQL($sqls);
     }
