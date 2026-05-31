@@ -11,6 +11,46 @@ class Benchmark extends Common
 {
     protected $table = 'benchmark_rate';
 
+    public function index($action = '', $data = [])
+    {
+        switch ($action) {
+            case 'list':
+                return $this->getList($data);
+            case 'getRateByDate':
+                return $this->getRateByDate($data);
+            case 'getRateByPeriod':
+                return $this->getRateByPeriod($data);
+            case 'getLatestRate':
+                return $this->getLatestRate($data);
+            case 'syncRates':
+                return $this->syncRates($data);
+            default:
+                return $this->error('未知操作: ' . $action);
+        }
+    }
+
+    protected function success($message = '操作成功', $data = [], $total = null)
+    {
+        $rt = [
+            'code' => self::CODE_SUCCESS,
+            'message' => $message,
+            'data' => $data
+        ];
+        if ($total !== null) {
+            $rt['total'] = $total;
+        }
+        return $rt;
+    }
+
+    protected function error($message = '操作失败', $data = [])
+    {
+        return [
+            'code' => self::CODE_ERROR,
+            'message' => $message,
+            'data' => $data
+        ];
+    }
+
     /**
      * 获取基准利率列表
      */
@@ -127,5 +167,59 @@ class Benchmark extends Common
             ->find();
 
         return $this->success('获取成功', $record);
+    }
+
+    /**
+     * 批量同步基准利率（存在即更新，不存在即新增）
+     */
+    public function syncRates($data)
+    {
+        $rows = $data['rows'] ?? [];
+        if (!is_array($rows) || count($rows) === 0) {
+            return $this->error('参数错误：rows 不能为空');
+        }
+
+        Db::startTrans();
+        try {
+            $inserted = 0;
+            $updated = 0;
+
+            foreach ($rows as $item) {
+                $publishDate = $item['date'] ?? '';
+                if (empty($publishDate)) {
+                    continue;
+                }
+
+                $saveData = [
+                    'publish_date' => $publishDate,
+                    'period_6m' => isset($item['6m']) ? floatval($item['6m']) : null,
+                    'period_6m_1y' => isset($item['6m_1y']) ? floatval($item['6m_1y']) : null,
+                    'period_1y_3y' => isset($item['1y_3y']) ? floatval($item['1y_3y']) : null,
+                    'period_3y_5y' => isset($item['3y_5y']) ? floatval($item['3y_5y']) : null,
+                    'period_5y_plus' => isset($item['5y_plus']) ? floatval($item['5y_plus']) : null,
+                    'period_1y' => isset($item['1y']) ? floatval($item['1y']) : null,
+                    'period_1y_5y' => isset($item['1y_5y']) ? floatval($item['1y_5y']) : null
+                ];
+
+                $exists = Db::name($this->table)->where('publish_date', $publishDate)->find();
+                if ($exists) {
+                    Db::name($this->table)->where('publish_date', $publishDate)->update($saveData);
+                    $updated++;
+                } else {
+                    Db::name($this->table)->insert($saveData);
+                    $inserted++;
+                }
+            }
+
+            Db::commit();
+            return $this->success('同步成功', [
+                'inserted' => $inserted,
+                'updated' => $updated,
+                'total' => count($rows)
+            ]);
+        } catch (\Exception $e) {
+            Db::rollback();
+            return $this->error('同步失败：' . $e->getMessage());
+        }
     }
 }
