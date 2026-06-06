@@ -7,8 +7,8 @@ dist/
 build/
 .env
 .env.local
-app/cccf/database.php
 *.log
 .vscode/
 .idea/
 *.sql
+/app/cccf/database.php
