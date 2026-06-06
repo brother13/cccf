@@ -97,6 +97,17 @@ class Data extends Common
                     $rt['message'] = "数据为空";
                 }
                 break;
+            case "cflist_grouped": //
+                $cflist = $this->getCfListGrouped($data);
+                if ($cflist) {
+                    $rt['data'] = $cflist;
+                    $rt['total'] = $cflist['total'];
+                    $rt['code'] = self::CODE_SUCCESS;
+                    $rt['message'] = "OK";
+                } else {
+                    $rt['message'] = "数据为空";
+                }
+                break;
             case "cflist_total": //用户列表
                 $rt['data'] = $this->getCfList_total($data);
                 break;
@@ -529,6 +540,116 @@ class Data extends Common
         $d['items'] = $data;
         $d['allitems'] = $alldata;
         $rt['data'] = $d;
+        return $d;
+    }
+
+    public function getCfListGrouped($data)
+    {
+        $deptcode = $data['deptcode'] ?? [];
+        $key = $data['keyword'] ?? '';
+        $pagesize = $data['pagesize'] ?? '';
+        $page = $data['page'] ?? '';
+        $enddate = $data['enddate'] ?? '';
+        $cfsf = $data['cfsf'] ?? '';
+        $startdate = $data['startdate'] ?? '';
+        $isvoid = $data['isvoid'] ?? "";
+        $datekeyword = $data['datekeyword'] ?? "enddate";
+        $myusername = $data['myusername'] ?? '';
+        $desc = '';
+        $id = $data['id'] ?? '';
+        $where = [];
+
+        if (!empty($key) && strlen($key) > 0) {
+            $where['ah|cbr|sqzxr|bzxr|note|ycbr'] = ['like', '%' . $key . '%'];
+        }
+
+        if (!empty($enddate) && strlen($enddate) > 2) {
+            $where[$datekeyword] = ['<=', $enddate . ' 23:59:59'];
+            $desc = '  ';
+        }
+        if (!empty($cfsf) && strlen($cfsf) > 1) {
+            $where['cfsf'] = $cfsf;
+        }
+
+        if (!empty($startdate) && strlen($startdate) > 2) {
+            $where['inserttime'] = ['>=', $startdate . ' 00:00:00'];
+        }
+
+        $allcbr = [];
+        if (is_array($deptcode) && count($deptcode) > 0) {
+            $allcbr = $this->getAllDeptCbr($deptcode);
+        }
+        if ($myusername != "Admin"  && strlen($myusername) > 0) {
+            $allcbr[] = $data['myusername'];
+        }
+        if (is_array($allcbr) && count($allcbr) > 0) {
+            $where['cbr|ycbr'] = ['in', $allcbr];
+        }
+
+        if ($isvoid != '') {
+            $where['isvoid'] = $isvoid;
+        }
+        if (strlen($id) > 0) {
+            $where = [];
+            $where['id'] = $id;
+        }
+
+        $order = $datekeyword . $desc . " ,id";
+        $field = ['cbr', 'ah', 'sqzxr', 'bzxr', 'type', 'status', 'startdate', 'enddate', 'note', 'id cflistid', 'isvoid', 'inserttime', 'ccqk', 'cfsf', 'ycbr', 'autocf', 'leixing', 'zbah', 'account', 'sjdjje', '0 as sjkhje', 'khljje', 'khljje as khljjebck'];
+        $num = $this->getdb('cflist_v')->where($where)->count();
+
+        $d = [];
+        if ($num < 1) {
+            $d['total'] = 0;
+            $d['items'] = [];
+            $d['allitems'] = [];
+            return $d;
+        }
+
+        $alldata = $this->getdb('cflist_v')->where($where)->field($field)->order($order)->page(1, $num)->select();
+        $grouped = [];
+
+        foreach ($alldata as $row) {
+            $ah = $row['ah'] ?? '';
+            $caseKey = trim($ah) === '' ? 'empty_' . $row['cflistid'] : $ah;
+            if (!isset($grouped[$caseKey])) {
+                $grouped[$caseKey] = [
+                    'case_key' => $caseKey,
+                    'ah' => $ah,
+                    'cbr' => $row['cbr'] ?? '',
+                    'sqzxr' => $row['sqzxr'] ?? '',
+                    'bzxr' => $row['bzxr'] ?? '',
+                    'ycbr' => $row['ycbr'] ?? '',
+                    'isvoid' => $row['isvoid'] ?? '',
+                    'min_enddate' => $row['enddate'] ?? '',
+                    'max_enddate' => $row['enddate'] ?? '',
+                    'item_count' => 0,
+                    'children' => []
+                ];
+            }
+
+            if (!empty($row['enddate'])) {
+                if (empty($grouped[$caseKey]['min_enddate']) || strtotime($row['enddate']) < strtotime($grouped[$caseKey]['min_enddate'])) {
+                    $grouped[$caseKey]['min_enddate'] = $row['enddate'];
+                }
+                if (empty($grouped[$caseKey]['max_enddate']) || strtotime($row['enddate']) > strtotime($grouped[$caseKey]['max_enddate'])) {
+                    $grouped[$caseKey]['max_enddate'] = $row['enddate'];
+                }
+            }
+
+            $grouped[$caseKey]['children'][] = $row;
+            $grouped[$caseKey]['item_count']++;
+        }
+
+        $caseItems = array_values($grouped);
+        $total = count($caseItems);
+        $page = intval($page) > 0 ? intval($page) : 1;
+        $pagesize = intval($pagesize) > 0 ? intval($pagesize) : 10;
+        $offset = ($page - 1) * $pagesize;
+
+        $d['total'] = $total;
+        $d['items'] = array_slice($caseItems, $offset, $pagesize);
+        $d['allitems'] = $alldata;
         return $d;
     }
 
