@@ -48,6 +48,9 @@ class System extends Common
             case 'client': //获取客户端信息
                 $rt['data'] = $this->getClientInfo();
             break;
+            case 'updateNotice': //获取更新公告
+                $rt['data'] = $this->getUpdateNotice();
+            break;
             default:
                 $rt['code'] = self::CODE_ERROR;
                 $rt['message']="操作【/".self::ACTION."/{$action}】并不存在！";
@@ -159,5 +162,40 @@ class System extends Common
         // $url = $config['url'] ?? self::CLIENT_URL;
         return $config;
     }
- 
+
+    /**
+     * 获取首页更新公告
+     *
+     * @return array
+     */
+    protected function getUpdateNotice(){
+        $notice = config("update_notice");
+        if(!is_array($notice)){
+            $notice = [];
+        }
+
+        $items = $notice['items'] ?? [];
+        if(!is_array($items)){
+            $items = [];
+        }
+        if(count($items)<1 && isset($notice['content'])){
+            $items = explode("\n", $notice['content']);
+        }
+
+        $list = [];
+        foreach($items as $item){
+            $text = trim($item);
+            if($text !== ""){
+                $list[] = $text;
+            }
+        }
+
+        return [
+            'enabled' => $notice['enabled'] ?? true,
+            'title' => $notice['title'] ?? '更新公告',
+            'date' => $notice['date'] ?? '',
+            'items' => $list
+        ];
+    }
+
 }
