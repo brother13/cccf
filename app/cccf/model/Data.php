@@ -1476,7 +1476,7 @@ $data = _cv_to_array($data);
 
             $item['action'] = $last['kzcsMc'] ?? '';
             $item['kzqk'] = $kzqk;
-
+            $item['autocf'] = '1';
             $newlist[] = $item;
         }
 
