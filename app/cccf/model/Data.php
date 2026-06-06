@@ -472,6 +472,7 @@ class Data extends Common
         $isvoid = $data['isvoid'] ?? "";
         $datekeyword = $data['datekeyword'] ?? "enddate";
         $myusername = $data['myusername'] ?? '';
+        $filterByUsername = config('cflist_filter_by_username');
         $desc = '';
         $id = $data['id'] ?? ''; //根据id查询时，为取唯一值，忽略其他条件
         $where = [];
@@ -511,9 +512,8 @@ class Data extends Common
             $allcbr[] = $data['myusername'];
         }
         if (is_array($allcbr) && count($allcbr) > 0) {
-            // $where['cbr|username|ycbr'] = ['in', $allcbr];
-            $where['cbr|ycbr'] = ['in', $allcbr];
-
+            $filterField = $filterByUsername ? 'username' : 'cbr|ycbr';
+            $where[$filterField] = ['in', $allcbr];
         }
 
         if ($isvoid != '') {
@@ -527,7 +527,7 @@ class Data extends Common
 
 
 
-        $order = $datekeyword . $desc . " ,id";
+        $order = "id desc";
         $field = ['cbr', 'ah', 'sqzxr', 'bzxr', 'type', 'status', 'startdate', 'enddate', 'note', 'id cflistid', 'isvoid', 'inserttime', 'ccqk', 'cfsf', 'ycbr', 'autocf', 'leixing', 'zbah', 'account', 'sjdjje', '0 as sjkhje', 'khljje', 'khljje as khljjebck'];
         $num = $this->getdb('cflist_v')->where($where)->count();
         $data = $this->getdb('cflist_v')->where($where)->field($field)->order($order)->page($page, $pagesize)->select();
@@ -555,6 +555,7 @@ class Data extends Common
         $isvoid = $data['isvoid'] ?? "";
         $datekeyword = $data['datekeyword'] ?? "enddate";
         $myusername = $data['myusername'] ?? '';
+        $filterByUsername = config('cflist_filter_by_username');
         $desc = '';
         $id = $data['id'] ?? '';
         $where = [];
@@ -583,7 +584,8 @@ class Data extends Common
             $allcbr[] = $data['myusername'];
         }
         if (is_array($allcbr) && count($allcbr) > 0) {
-            $where['cbr|ycbr'] = ['in', $allcbr];
+            $filterField = $filterByUsername ? 'username' : 'cbr|ycbr';
+            $where[$filterField] = ['in', $allcbr];
         }
 
         if ($isvoid != '') {
@@ -594,7 +596,7 @@ class Data extends Common
             $where['id'] = $id;
         }
 
-        $order = $datekeyword . $desc . " ,id";
+        $order = "id desc";
         $field = ['cbr', 'ah', 'sqzxr', 'bzxr', 'type', 'status', 'startdate', 'enddate', 'note', 'id cflistid', 'isvoid', 'inserttime', 'ccqk', 'cfsf', 'ycbr', 'autocf', 'leixing', 'zbah', 'account', 'sjdjje', '0 as sjkhje', 'khljje', 'khljje as khljjebck'];
         $num = $this->getdb('cflist_v')->where($where)->count();
 
