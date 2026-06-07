@@ -1293,7 +1293,7 @@ class User extends Common
 
         if (empty($userpass) && $userid == 0) {
             $userpass = self::PASSWORD_DEFAULT;
-            $userpass = $this->_encrypt($userpass);
+            // $userpass = $this->_encrypt($userpass);
             // $userpass = md5($userpass . "_salary");
             $d['userpass'] = $userpass;
         }

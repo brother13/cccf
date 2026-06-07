@@ -94,6 +94,9 @@ class Update extends Courtcase
             case '20260320': // 增加查询所有人的权限
                 return $this->update_20260320();
                 break;
+            case '20260607': // 增加执行款台账计算权限
+                return $this->update_20260607();
+                break;
             default:
                 break;
         }
@@ -131,9 +134,9 @@ class Update extends Courtcase
         $today = date("Y-m-d");
 
         $adddays = 15; // 默认增加15天
-        $sqls[] = "UPDATE {$table_shoukuan} s,{$table_ajjbxx} a SET s.zxyj=a.zxyj,s.ay=a.ay,s.labd=a.labd,s.larq=a.larq WHERE a.ah=s.ah AND s.zxyj IS NULL;";
-        $sqls[] = "UPDATE {$table_shoukuan_ye} s,{$table_ajjbxx} a SET s.zxyj=a.zxyj,s.ay=a.ay,s.labd=a.labd,s.larq=a.larq WHERE a.ah=s.ah AND s.zxyj IS NULL;";
-        $sqls[] = "UPDATE {$table_tuikuan} s,{$table_ajjbxx} a SET s.zxyj=a.zxyj,s.ay=a.ay,s.labd=a.labd,s.larq=a.larq WHERE a.ah=s.ah AND s.zxyj IS NULL;";
+        $sqls[] = "UPDATE {$table_shoukuan} s,{$table_ajjbxx} a SET s.dsr=a.dsr,s.zxyj=a.zxyj,s.ay=a.ay,s.labd=a.labd,s.larq=a.larq WHERE a.ah=s.ah AND s.zxyj IS NULL;";
+        $sqls[] = "UPDATE {$table_shoukuan_ye} s,{$table_ajjbxx} a SET s.dsr=a.dsr,s.zxyj=a.zxyj,s.ay=a.ay,s.labd=a.labd,s.larq=a.larq WHERE a.ah=s.ah AND s.zxyj IS NULL;";
+        $sqls[] = "UPDATE {$table_tuikuan} s,{$table_ajjbxx} a SET s.dsr=a.dsr,s.zxyj=a.zxyj,s.ay=a.ay,s.labd=a.labd,s.larq=a.larq WHERE a.ah=s.ah AND s.zxyj IS NULL;";
 
         // 计算结束时间
         $sqls[] = "update {$table_shoukuan} set enddate=yh_enddate,days=DATEDIFF(dzdate,'{$today}') where yh_enddate is not null and length(yh_enddate)>1 and yh_enddate<>ifnull(enddate,'')";
@@ -357,6 +360,16 @@ ENGINE=InnoDB
         ";
         $sqls[] = "alter table admin_postlog comment '提交信息日志';";
         $sqls[] = "REPLACE INTO `admin_rule` VALUES (26, 'CFTZ_EDIT_OTHER', '查封台账-允许编辑他们记录', '', '', '', 0, '', '', 0, '', 0);";
+
+        return $this->updateSQL($sqls);
+    }
+
+    // 增加执行款台账计算权限
+    protected function update_20260607()
+    {
+        $sqls = [];
+        $sqls[] = "REPLACE INTO `admin_rule` (`ruleid`, `rulename`, `ruletitle`, `note`, `ruleurl`, `moduleid`, `isvoid`, `createtime`, `updatetime`, `isdel`, `deltime`, `rank`) VALUES (27, 'ZXTZ_CALCULATE_LEDGER', '允许计算台账数据', '', '', '', 0, '', '', 0, '', 0);";
+        $sqls[] = "UPDATE `admin_group` SET `grouprule` = CASE WHEN FIND_IN_SET('27', `grouprule`) THEN `grouprule` WHEN `grouprule` IS NULL OR `grouprule` = '' THEN '27' ELSE CONCAT(`grouprule`, ',27') END WHERE `groupid` = 6;";
 
         return $this->updateSQL($sqls);
     }

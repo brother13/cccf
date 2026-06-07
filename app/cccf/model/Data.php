@@ -213,7 +213,7 @@ class Data extends Common
                 $rt = $this->saveCflistone(0, $data);
                 if ($data["baseurl"] != '') {
                     $id = $rt['id'];
-                    $url = $data["baseurl"] . "index.html#/tz/xzjl?id=" . $id;
+                    $url = $data["baseurl"] . "index.html#/tz/txcl?id=" . $id;
                     header("Location: " . $url);
                     exit(); // 确保脚本执行完毕后停止
                 }
@@ -234,7 +234,7 @@ class Data extends Common
                 $rt = $this->saveCflistone_batch(0, $data);
                 if ($data["baseurl"] != '') {
                     $id = $rt['data'];
-                    $url = $data["baseurl"] . "index.html#/tz/xzjl?batch=1&batchid=" . $id;
+                    $url = $data["baseurl"] . "index.html#/tz/txcl?batch=1&batchid=" . $id;
                     header("Location: " . $url);
                     exit(); // 确保脚本执行完毕后停止
                 }
@@ -411,7 +411,7 @@ class Data extends Common
         if ($cflistid != 0) {
             $this->getdb("cflist")->where($where)->update($d);
         } else {
-            $d['username'] = $data['username'];
+            $d['username'] = $this->userinfo['username'] ?? '';
             $inret = $this->getdb("cflist")->insert($d, false, true);
             $rt['id'] = $inret;
         }
@@ -1557,6 +1557,9 @@ $data = _cv_to_array($data);
 
         $newdata = [];
         $newdata['username'] = $this->userinfo['username'] ?? '';
+        if (($param['autocf'] ?? 0) == 1) {
+            $newdata['autocf'] = 1;
+        }
 
         $now = getNowTime();
         $newdata['inserttime'] = $now;
