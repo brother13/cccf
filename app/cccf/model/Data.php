@@ -166,6 +166,12 @@ class Data extends Common
                     $rt['message'] = "数据为空";
                 }
                 break;
+            case "xdztcount": //自动化执行提醒统计
+                $rt = $this->getXdZtCount($data);
+                break;
+            case "xdlisttotz": //续冻结果更新到台账
+                $rt = $this->updateXdToCflist($data);
+                break;
             case "xdlistdel": //用户列表
                 $id = $data['xdlistid'] ?? 0;
                 $rt['data'] = $this->delXdlis($id);
@@ -527,7 +533,7 @@ class Data extends Common
 
 
 
-        $order = "id desc";
+        $order = $datekeyword . $desc . " ,id";
         $field = ['cbr', 'ah', 'sqzxr', 'bzxr', 'type', 'status', 'startdate', 'enddate', 'note', 'id cflistid', 'isvoid', 'inserttime', 'ccqk', 'cfsf', 'ycbr', 'autocf', 'leixing', 'zbah', 'account', 'sjdjje', '0 as sjkhje', 'khljje', 'khljje as khljjebck'];
         $num = $this->getdb('cflist_v')->where($where)->count();
         $data = $this->getdb('cflist_v')->where($where)->field($field)->order($order)->page($page, $pagesize)->select();
@@ -596,7 +602,7 @@ class Data extends Common
             $where['id'] = $id;
         }
 
-        $order = "id desc";
+        $order = "enddate asc,id desc";
         $field = ['cbr', 'ah', 'sqzxr', 'bzxr', 'type', 'status', 'startdate', 'enddate', 'note', 'id cflistid', 'isvoid', 'inserttime', 'ccqk', 'cfsf', 'ycbr', 'autocf', 'leixing', 'zbah', 'account', 'sjdjje', '0 as sjkhje', 'khljje', 'khljje as khljjebck'];
         $num = $this->getdb('cflist_v')->where($where)->count();
 
@@ -643,7 +649,34 @@ class Data extends Common
             $grouped[$caseKey]['item_count']++;
         }
 
+        $dateSortValue = function ($value) {
+            if (empty($value)) {
+                return PHP_INT_MAX;
+            }
+            $time = strtotime($value);
+            return $time === false ? PHP_INT_MAX : $time;
+        };
+
         $caseItems = array_values($grouped);
+        foreach ($caseItems as &$caseItem) {
+            usort($caseItem['children'], function ($a, $b) use ($dateSortValue) {
+                $dateCompare = $dateSortValue($a['enddate'] ?? '') <=> $dateSortValue($b['enddate'] ?? '');
+                if ($dateCompare !== 0) {
+                    return $dateCompare;
+                }
+                return intval($b['cflistid'] ?? 0) <=> intval($a['cflistid'] ?? 0);
+            });
+        }
+        unset($caseItem);
+
+        usort($caseItems, function ($a, $b) use ($dateSortValue) {
+            $dateCompare = $dateSortValue($a['min_enddate'] ?? '') <=> $dateSortValue($b['min_enddate'] ?? '');
+            if ($dateCompare !== 0) {
+                return $dateCompare;
+            }
+            return strcmp((string)($a['case_key'] ?? ''), (string)($b['case_key'] ?? ''));
+        });
+
         $total = count($caseItems);
         $page = intval($page) > 0 ? intval($page) : 1;
         $pagesize = intval($pagesize) > 0 ? intval($pagesize) : 10;
@@ -1154,7 +1187,7 @@ class Data extends Common
         }
 
         $order = $datekeyword . " ,ah";
-        $field = ['ah', 'zt', 'bzxr', 'zhanghu', 'FORMAT(je,2) as je', 'danwei', 'lastdate', 'thisdate', 'cbr', 'querytime', 'FORMAT(newje,2) as newje,id as xdlistid', 'isvoid', 'enddate', 'reason'];
+        $field = ['ah', 'zt', 'bzxr', 'zhanghu', 'FORMAT(je,2) as je', 'danwei', 'startdate', 'lastdate', 'thisdate', 'cbr', 'querytime', 'FORMAT(newje,2) as newje,id as xdlistid', 'isvoid', 'enddate', 'reason', 'ledgerUpdated'];
         $num = $this->getdb('xd_v')->where($where)->count();
         //$newjenum = $this->getdb('xd_v')->where($where)->where("newje", ">", "je")->count();
         $data = $this->getdb('xd_v')->where($where)->field($field)->order($order)->page($page, $pagesize)->select();
@@ -1169,6 +1202,98 @@ class Data extends Common
         $d['allitems'] = $alldata;
         $rt['data'] = $d;
         return $d;
+    }
+
+    protected function getXdZtCount($data = [])
+    {
+        $rt = $this->_rt();
+        $myusername = $data['myusername'] ?? '';
+        $statusList = ['继续冻结成功', '继续冻结失败'];
+        $count = [
+            'continueFreezeSuccess' => 0,
+            'continueFreezeFail' => 0
+        ];
+
+        foreach ($statusList as $status) {
+            $where = [];
+            $where['zt'] = $status;
+            if (strlen($myusername) > 0) {
+                $where['cbr'] = $myusername;
+            }
+
+            $num = $this->getdb('xd_v')->where($where)->count();
+            if ($status == '继续冻结成功') {
+                $count['continueFreezeSuccess'] = $num;
+            } else {
+                $count['continueFreezeFail'] = $num;
+            }
+        }
+
+        $rt['code'] = self::CODE_SUCCESS;
+        $rt['message'] = 'OK';
+        $rt['data'] = $count;
+        return $rt;
+    }
+
+    protected function updateXdToCflist($data = [])
+    {
+        $rt = $this->_rt();
+        $ah = trim($data['ah'] ?? '');
+        $account = trim($data['zhanghu'] ?? '');
+        $startdate = $this->formatDateValue($data['startdate'] ?? '');
+        $enddate = $this->formatDateValue($data['enddate'] ?? '');
+
+        if ($ah == '' || $account == '') {
+            $rt['message'] = '案号或续冻账号为空，无法更新台账';
+            return $rt;
+        }
+        if ($enddate == '') {
+            $rt['message'] = '届满日期为空，未更新台账';
+            return $rt;
+        }
+
+        $where = [
+            'ah' => $ah,
+            'account' => $account
+        ];
+        $matched = $this->getdb('cflist')->where($where)->count();
+        if ($matched < 1) {
+            $rt['message'] = '台账中未找到匹配的案号和续冻账号';
+            return $rt;
+        }
+
+        $saveData = [
+            'enddate' => $enddate
+        ];
+        if ($startdate != '') {
+            $saveData['startdate'] = $startdate;
+        }
+
+        $updated = $this->getdb('cflist')->where($where)->update($saveData);
+        $xdlistid = $data['xdlistid'] ?? 0;
+        if ($xdlistid > 0) {
+            $this->getdb('xd')->where(['id' => $xdlistid])->update(['ledger_updated' => 1]);
+        }
+
+        $rt['code'] = self::CODE_SUCCESS;
+        $rt['data'] = [
+            'matched' => $matched,
+            'updated' => $updated
+        ];
+        $rt['message'] = $updated > 0 ? '更新台账成功' : '台账日期已一致，无需更新';
+        return $rt;
+    }
+
+    protected function formatDateValue($value = '')
+    {
+        if (empty($value)) {
+            return '';
+        }
+        $time = strtotime($value);
+        if ($time === false) {
+            return '';
+        }
+        return date('Y-m-d', $time);
     }
 
 
@@ -1187,11 +1312,11 @@ class Data extends Common
 
     public function saveXdlistone($xdlistid, $data)
     {
-        $field = ['ah', 'zt', 'bzxr', 'zhanghu', 'je', 'danwei', 'lastdate', 'thisdate', 'cbr', 'querytime', 'newje', 'isvoid', 'enddate', 'reason'];
+        $field = ['ah', 'zt', 'bzxr', 'zhanghu', 'je', 'danwei', 'startdate', 'lastdate', 'thisdate', 'cbr', 'querytime', 'newje', 'isvoid', 'enddate', 'reason'];
         $d = [];
         foreach ($field as $f) {
             if (isset($data[$f])) {
-                if (($f == 'lastdate' || $f == 'thisdate' || $f == 'querytime') && $data[$f] == "") { //日期格式不支持传空字符串
+                if (($f == 'startdate' || $f == 'lastdate' || $f == 'thisdate' || $f == 'querytime') && $data[$f] == "") { //日期格式不支持传空字符串
                     $d[$f] = null;
                 } else {
                     $d[$f] = $data[$f];
@@ -1434,52 +1559,53 @@ $data = _cv_to_array($data);
             if (count($children) < 1) {
                 continue;
             }
-            $last = $children[0];
+            foreach ($children as $last) {
+                $kzqk = trim($last['kzqk'] ?? '');
 
-            $kzqk = $last['kzqk'] ?? '';
+                if (strpos($kzqk, '冻结成功') === false) {
+                    continue;
+                }
+                $childItem = $item;
+                $childItem['type'] = $last['cclxmc'] ?? '';
 
-            if (!strpos($kzqk, '成功')) {
-                continue;
+
+
+                $startdate = $last['tqkzsj'] ?? ''; //开始日期
+                $enddate = $last['csjsrq'] ?? ''; // 届满日期
+
+                if (!empty($startdate)) {
+                    $startdate = date('Y-m-d', strtotime($startdate));
+                }
+                if (!empty($enddate)) {
+                    $enddate = date('Y-m-d', strtotime($enddate));
+                }
+                $childItem['startdate'] = $startdate;
+                $childItem['enddate'] = $enddate; //届满日期
+
+
+                $childItem['sjdjje'] = $last['sdje'] ?? 0; // 冻结金额
+                $dsrxm = $last['zjxx'] ?? "";
+                $bankname = $last['fkxx'] ?? '';
+                $bankname = str_replace(['<![CDATA[', '<br/>', ']]>'], '', $bankname);
+
+                // bankname的样式如下 平安银行(2025/10/15 10:53:43)，我需要把它拆成两部分，一个银行，一个反馈时间
+                $bankname = str_replace('(', '|', $bankname);
+                $bankname = str_replace(')', '|', $bankname);
+                $bankname_arr = explode('|', $bankname);
+                $bankname = $bankname_arr[0];
+                $feedbacktime = $bankname_arr[1] ?? '';
+
+                $note = $childItem['bzxr'] . ',' . $dsrxm . ";" . $bankname . ':' . $feedbacktime . ';' . $childItem['account'];
+                $childItem['ccqk'] = $note;
+                $childItem['zbah'] = $caseinfo_zb;
+                $childItem['bankname'] = $bankname;
+                $childItem['bank_feedbacktime'] = $feedbacktime;
+
+                $childItem['action'] = $last['kzcsMc'] ?? '';
+                $childItem['kzqk'] = $kzqk;
+                $childItem['autocf'] = '1';
+                $newlist[] = $childItem;
             }
-            $item['type'] = $last['cclxmc'] ?? '';
-
-
-
-            $startdate = $last['tqkzsj'] ?? ''; //开始日期
-            $enddate = $last['csjsrq'] ?? ''; // 届满日期
-
-            if (!empty($startdate)) {
-                $startdate = date('Y-m-d', strtotime($startdate));
-            }
-            if (!empty($enddate)) {
-                $enddate = date('Y-m-d', strtotime($enddate));
-            }
-            $item['startdate'] = $startdate;
-            $item['enddate'] = $enddate; //届满日期
-
-
-            $item['sjdjje'] = $last['sdje'] ?? 0; // 冻结金额
-            $dsrxm = $last['zjxx'] ?? "";
-            $bankname = $last['fkxx'] ?? '';
-            $bankname = str_replace(['<![CDATA[', '<br/>', ']]>'], '', $bankname);
-
-            // bankname的样式如下 平安银行(2025/10/15 10:53:43)，我需要把它拆成两部分，一个银行，一个反馈时间
-            $bankname = str_replace('(', '|', $bankname);
-            $bankname = str_replace(')', '|', $bankname);
-            $bankname_arr = explode('|', $bankname);
-            $bankname = $bankname_arr[0];
-            $feedbacktime = $bankname_arr[1] ?? '';
-
-            $note = $item['bzxr'] . ',' . $dsrxm . ";" . $bankname . ':' . $feedbacktime . ';' . $item['account'];
-            $item['ccqk'] = $note;
-            $item['zbah'] = $caseinfo_zb;
-            $item['bankname'] = $bankname;
-            $item['bank_feedbacktime'] = $feedbacktime;
-
-            $item['action'] = $last['kzcsMc'] ?? '';
-            $item['kzqk'] = $kzqk;
-            $item['autocf'] = '1';
-            $newlist[] = $item;
         }
 
 
