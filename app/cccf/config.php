@@ -56,6 +56,11 @@ return [
         ]
     ],
 
+    // 台账列表权限过滤方式
+    // false: 按承办人/原承办人 cbr|ycbr 过滤
+    // true: 按记录人 username 过滤，适用于法官助理/书记员各自管理自己添加台账的场景
+    'cflist_filter_by_username'=>true,
+
     // 二次校验的时间等配置
     'safeauth'=>[
         // 通讯录开关
