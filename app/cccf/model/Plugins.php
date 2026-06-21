@@ -816,7 +816,9 @@ class Plugins extends Courtcase
 
 
         $where = [];
-        $where['dwid'] = $this->dwid;
+        if (empty($param['ignore_dwid'])) {
+            $where['dwid'] = $this->dwid;
+        }
 
         $where_date = $this->_where_date($starttime, $endtime);
         if ($where_date) {
@@ -1056,7 +1058,9 @@ class Plugins extends Courtcase
 
 
         $where = [];
-        $where['dwid'] = $this->dwid;
+        if (empty($param['ignore_dwid'])) {
+            $where['dwid'] = $this->dwid;
+        }
 
         $where_date = $this->_where_date($starttime, $endtime);
         if ($where_date) {
