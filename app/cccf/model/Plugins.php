@@ -914,7 +914,10 @@ class Plugins extends Courtcase
                     break;
             }
         }
-        $field = ['count(*)' => "num", 'sum(jzje)' => "je"];
+        $field = [
+            'count(*)' => "num",
+            "SUM(CAST(REPLACE(IFNULL(jzje, '0'), ',', '') AS DECIMAL(18,2)))" => "je"
+        ];
         $total = $this->getdb($table)->where($where)->field($field)->find();
         $data = $this->getdb($table)->where($where)->order($order)->page($page, $pagesize)->select();
 
@@ -1036,6 +1039,8 @@ class Plugins extends Courtcase
         $pagesize = $param['pagesize'] ?? 10;
 
         $notestatus = $param['notestatus'] ?? 0;
+        $payout_type = $param['payout_type'] ?? '';
+        $payee_type = $param['payee_type'] ?? '';
 
         $order = "czdate,djcode";
 
@@ -1099,8 +1104,14 @@ class Plugins extends Courtcase
             }
         }
 
+        $this->applyNotaxPayoutTypeWhere($where, $payout_type);
+        $this->applyPayeeTypeWhere($where, $payee_type);
 
-        $field = ['count(*)' => "num", 'sum(je)' => "je"];
+
+        $field = [
+            'count(*)' => "num",
+            "SUM(CAST(REPLACE(IF(je='' OR je IS NULL, '0', je), ',', '') AS DECIMAL(18,2)))" => "je"
+        ];
         $total = $this->getdb($table)->where($where)->field($field)->find();
         $data = $this->getdb($table)->where($where)->order($order)->page($page, $pagesize)->select();
         $newdata = [];
@@ -1111,6 +1122,66 @@ class Plugins extends Courtcase
         $rt['message'] = 'OK';
         $rt['data'] = $newdata;
         return $rt;
+    }
+
+    protected function applyPayeeTypeWhere(&$where, $payee_type = '')
+    {
+        if (empty($payee_type)) {
+            return;
+        }
+
+        $skrNotEmpty = "LENGTH(IFNULL(`skr`, '')) > 0";
+        switch ($payee_type) {
+            case 'applicant':
+                $where['_payee_type_'] = Db::raw("({$skrNotEmpty} AND INSTR(IFNULL(`yg`, ''), `skr`) > 0)");
+                break;
+            case 'respondent':
+                $where['_payee_type_'] = Db::raw("({$skrNotEmpty} AND INSTR(IFNULL(`bg`, ''), `skr`) > 0)");
+                break;
+            case 'other':
+                $where['_payee_type_'] = Db::raw("(LENGTH(IFNULL(`skr`, '')) = 0 OR (INSTR(IFNULL(`yg`, ''), `skr`) = 0 AND INSTR(IFNULL(`bg`, ''), `skr`) = 0))");
+                break;
+        }
+    }
+
+    protected function applyNotaxPayoutTypeWhere(&$where, $payout_type = '')
+    {
+        if (empty($payout_type)) {
+            return;
+        }
+
+        $config = config('notax_payout_types');
+        if (empty($config) || empty($config['account_name_keyword'])) {
+            return;
+        }
+
+        $where['skr_accountname'] = ['like', '%' . $config['account_name_keyword'] . '%'];
+
+        $types = $config['types'] ?? [];
+        if (empty($types[$payout_type])) {
+            return;
+        }
+
+        $keywords = $types[$payout_type]['keywords'] ?? [];
+        $likes = [];
+        foreach ($keywords as $keyword) {
+            if (!empty($keyword)) {
+                $likes[] = '%' . $keyword . '%';
+            }
+        }
+
+        if (empty($likes)) {
+            $where['_notax_payout_type_'] = Db::raw('1=0');
+            return;
+        }
+
+        $noteConditions = [];
+        foreach ($keywords as $keyword) {
+            if (!empty($keyword)) {
+                $noteConditions[] = "`note` LIKE '%" . addslashes($keyword) . "%'";
+            }
+        }
+        $where['_notax_payout_note_'] = Db::raw('(' . implode(' OR ', $noteConditions) . ')');
     }
 
     /**
@@ -1303,6 +1374,17 @@ class Plugins extends Courtcase
     }
 
     /**
+     * 获取执行款台账按案号汇总表临时表名
+     *
+     * @return string
+     */
+    public function getTablename_sk_tk_ah_summary()
+    {
+        $table = config("database.prefix") . "temp_sk_tk_ah_summary";
+        return $table;
+    }
+
+    /**
      * 创建执行款台账汇总表临时表
      *
      * @param array $param
@@ -1470,6 +1552,152 @@ class Plugins extends Courtcase
     }
 
     /**
+     * 创建执行款台账按案号汇总临时表
+     *
+     * @param array $param
+     * @return array
+     */
+    protected function _createtemp_sk_tk_ah_summary($param = [])
+    {
+        $rt = $this->_rt();
+        $endtime = $param['endtime'] ?? date('Y-m-d');
+        if (!empty($endtime) && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $endtime)) {
+            $endtime = date('Y-m-d');
+        }
+        $force = !empty($param['force']);
+        $dwid = $this->dwid ?? 0;
+
+        $prefix = config("database.prefix") ?? 'court_';
+        $table = $this->getTablename_sk_tk_ah_summary();
+        $table_tk_sum = $table . '_tk';
+        $table_sk = $prefix . self::TABLE_ADMIN_SHOUKUAN;
+        $table_tk = $prefix . self::TABLE_ADMIN_TUIKUAN;
+
+        if (!$force) {
+            try {
+                $cached = $this->getdb()->table($table)->field('endtime')->find();
+                if (!empty($cached) && $cached['endtime'] === $endtime) {
+                    $rt['code'] = self::CODE_SUCCESS;
+                    $rt['message'] = 'OK (cached)';
+                    $rt['data'] = ['table' => str_replace($prefix, '', $table), 'cached' => true];
+                    return $rt;
+                }
+            } catch (\Exception $e) {
+                // 表不存在，继续创建
+            }
+        }
+
+        ini_set('max_execution_time', 600);
+
+        $sqls = [];
+
+        $sqls[] = "DROP TABLE IF EXISTS {$table_tk_sum}";
+        $sqls[] = "DROP TABLE IF EXISTS {$table}";
+
+        $sqls[] = "CREATE TABLE {$table} AS
+            SELECT
+                '' AS djcode, ah, MIN(dzdate) AS dzdate,
+                SUM(CAST(REPLACE(IFNULL(jzje, '0'), ',', '') AS DECIMAL(18,2))) AS sk_je,
+                GROUP_CONCAT(DISTINCT dsr) AS dsr, MAX(cbbm) AS cbbm,
+                MAX(cbr) AS cbr, MAX(sjy) AS sjy, MAX(yg) AS yg,
+                MAX(bg) AS bg, MAX(ay) AS ay, MAX(yh_zt) AS yh_zt,
+                0 AS tk_je, '' AS czdate, 0 AS ye,
+                '' AS skr, '' AS skr_bank, '' AS skr_account,
+                0 AS workdays, '{$endtime}' AS endtime
+            FROM {$table_sk}
+            WHERE dwid={$dwid} AND dzdate<='{$endtime}'
+            GROUP BY ah";
+
+        $sqls[] = "ALTER TABLE {$table} MODIFY COLUMN djcode VARCHAR(255)";
+        $sqls[] = "ALTER TABLE {$table} MODIFY COLUMN czdate VARCHAR(20)";
+        $sqls[] = "ALTER TABLE {$table} MODIFY COLUMN skr VARCHAR(255)";
+        $sqls[] = "ALTER TABLE {$table} MODIFY COLUMN skr_bank VARCHAR(255)";
+        $sqls[] = "ALTER TABLE {$table} MODIFY COLUMN skr_account VARCHAR(255)";
+        $sqls[] = "ALTER TABLE {$table} MODIFY COLUMN yh_zt VARCHAR(50)";
+        $sqls[] = "ALTER TABLE {$table} ADD COLUMN id INT AUTO_INCREMENT PRIMARY KEY FIRST";
+        $sqls[] = "ALTER TABLE {$table} ADD INDEX idx_ah (ah)";
+        $sqls[] = "ALTER TABLE {$table} ADD INDEX idx_workdays (workdays)";
+
+        $sqls[] = "CREATE TABLE {$table_tk_sum} AS
+            SELECT
+                ah,
+                SUM(CAST(REPLACE(IF(je='' OR je IS NULL, '0', je), ',', '') AS DECIMAL(18,2))) AS tk_je,
+                MAX(czdate) AS czdate
+            FROM {$table_tk}
+            WHERE dwid={$dwid} AND czdate<='{$endtime}'
+            GROUP BY ah";
+        $sqls[] = "ALTER TABLE {$table_tk_sum} ADD INDEX idx_ah (ah)";
+
+        $sqls[] = "UPDATE {$table} s
+            LEFT JOIN {$table_tk_sum} t ON s.ah=t.ah
+            SET s.tk_je = COALESCE(t.tk_je, 0), s.czdate = COALESCE(t.czdate, '')";
+
+        $sqls[] = "UPDATE {$table} SET ye = sk_je - tk_je";
+
+        $sqls[] = "UPDATE {$table}
+            SET workdays = GREATEST(DATEDIFF(IF(czdate IS NOT NULL AND czdate != '', czdate, '{$endtime}'), dzdate), 0)";
+
+        $sqls[] = "UPDATE {$table} s SET
+            skr = (SELECT t.skr FROM {$table_tk} t
+                WHERE t.dwid={$dwid}
+                AND t.ah=s.ah AND t.czdate<='{$endtime}'
+                ORDER BY t.czdate DESC LIMIT 1)
+            WHERE s.tk_je > 0";
+
+        $sqls[] = "UPDATE {$table} s SET
+            skr_bank = (SELECT t.skr_bank FROM {$table_tk} t
+                WHERE t.dwid={$dwid}
+                AND t.ah=s.ah AND t.czdate<='{$endtime}'
+                ORDER BY t.czdate DESC LIMIT 1)
+            WHERE s.tk_je > 0";
+
+        $sqls[] = "UPDATE {$table} s SET
+            skr_account = (SELECT t.skr_account FROM {$table_tk} t
+                WHERE t.dwid={$dwid}
+                AND t.ah=s.ah AND t.czdate<='{$endtime}'
+                ORDER BY t.czdate DESC LIMIT 1)
+            WHERE s.tk_je > 0";
+
+        $sqls[] = "DROP TABLE IF EXISTS {$table_tk_sum}";
+
+        $exectime = [];
+        foreach ($sqls as $index => $_sql) {
+            $key_start = "sql_{$index}_start";
+            Debug::remark($key_start);
+            $message = "OK";
+
+            try {
+                $this->getdblink()->execute($_sql);
+            } catch (\Exception $e) {
+                $err = $e->getMessage();
+                if (!json_encode($err)) {
+                    $err = _cv_gbk_to_utf8($err);
+                }
+                $message = $err;
+            }
+
+            $key_end = "sql_{$index}_end";
+            Debug::remark($key_end);
+            $time = Debug::getRangeTime($key_start, $key_end);
+            $exectime[] = [
+                'sql' => $_sql,
+                'index' => $index,
+                'time' => $time,
+                'message' => $message
+            ];
+        }
+
+        $info = [];
+        $info['table'] = str_replace($prefix, '', $table);
+        $info['exectime'] = $exectime;
+
+        $rt['code'] = self::CODE_SUCCESS;
+        $rt['message'] = 'OK';
+        $rt['data'] = $info;
+        return $rt;
+    }
+
+    /**
      * 执行款台账汇总表查询
      *
      * @param array $param
@@ -1486,6 +1714,7 @@ class Plugins extends Courtcase
         $datetype = $param['datetype'] ?? 'dzdate';
         $days_range = $param['days_range'] ?? '';
         $balance_filter = $param['balance_filter'] ?? '';
+        $summary_mode = $param['summary_mode'] ?? 'bill_case';
         $balance_endtime = $param['balance_endtime'] ?? '';
         $force_recalc = !empty($param['force_recalc']);
         $refresh_summary = !empty($param['refresh_summary']);
@@ -1494,7 +1723,12 @@ class Plugins extends Courtcase
         $sort = $param['sort'] ?? '';
 
         $prefix = config("database.prefix") ?? 'court_';
-        $table_full = $this->getTablename_sk_tk_summary();
+        if ($summary_mode !== 'case_only') {
+            $summary_mode = 'bill_case';
+        }
+        $table_full = $summary_mode === 'case_only'
+            ? $this->getTablename_sk_tk_ah_summary()
+            : $this->getTablename_sk_tk_summary();
         $table = str_replace($prefix, '', $table_full);
 
         // 验证余额截止日期格式
@@ -1504,7 +1738,10 @@ class Plugins extends Courtcase
 
         // 页面查询只读取当前汇总表；点击“计算”时才刷新汇总表。
         if ($refresh_summary) {
-            $tempResult = $this->_createtemp_sk_tk_summary(['endtime' => $balance_endtime ?: date('Y-m-d'), 'force' => $force_recalc]);
+            $tempParam = ['endtime' => $balance_endtime ?: date('Y-m-d'), 'force' => $force_recalc];
+            $tempResult = $summary_mode === 'case_only'
+                ? $this->_createtemp_sk_tk_ah_summary($tempParam)
+                : $this->_createtemp_sk_tk_summary($tempParam);
             if ($tempResult['code'] != self::CODE_SUCCESS) {
                 $rt['message'] = '创建临时表失败: ' . $tempResult['message'];
                 return $rt;
