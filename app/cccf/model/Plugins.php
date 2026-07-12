@@ -113,6 +113,9 @@ class Plugins extends Courtcase
             case 'queryList_sk_tk_summary':
                 $rt = $this->queryList_sk_tk_summary($data);
                 break;
+            case 'notaxPayoutTypes':
+                $rt = $this->notaxPayoutTypes();
+                break;
             default:
                 $rt['message'] = "操作【/" . self::ACTION . "/{$action}】并不存在！";
         }
@@ -1121,6 +1124,16 @@ class Plugins extends Courtcase
         $rt['code'] = self::CODE_SUCCESS;
         $rt['message'] = 'OK';
         $rt['data'] = $newdata;
+        return $rt;
+    }
+
+    protected function notaxPayoutTypes()
+    {
+        $rt = $this->_rt();
+        $config = config('notax_payout_types');
+        $rt['code'] = self::CODE_SUCCESS;
+        $rt['message'] = 'OK';
+        $rt['data'] = $config ?: [];
         return $rt;
     }
 

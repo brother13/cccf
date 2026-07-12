@@ -59,7 +59,7 @@ return [
     // 台账列表权限过滤方式
     // false: 按承办人/原承办人 cbr|ycbr 过滤
     // true: 按记录人 username 过滤，适用于法官助理/书记员各自管理自己添加台账的场景
-    'cflist_filter_by_username'=>true,
+    'cflist_filter_by_username'=>false,
 
     // 二次校验的时间等配置
     'safeauth'=>[
@@ -72,6 +72,37 @@ return [
         'tool'=>[
             'enable'=>true,
             'time'=>1800 // 默认 3分钟
+        ]
+    ],
+    // 非税收入发放类型筛选配置
+    // 前置条件：收款人户名包含 account_name_keyword；明细类型再按承办人说明 note 的关键词匹配。
+    'notax_payout_types'=>[
+        'account_name_keyword'=>'非税',
+        'types'=>[
+            'execution_fee'=>[
+                'label'=>'执行费',
+                'keywords'=>['执行费', '执费']
+            ],
+            'fine'=>[
+                'label'=>'罚金',
+                'keywords'=>['罚金']
+            ],
+            'case_acceptance_fee'=>[
+                'label'=>'案件受理费',
+                'keywords'=>['案件受理费', '受理费', '诉讼费']
+            ],
+            'preservation_fee'=>[
+                'label'=>'保全费',
+                'keywords'=>['保全费', '保全']
+            ],
+            'recovery'=>[
+                'label'=>'追缴',
+                'keywords'=>['追缴', '追缴款']
+            ],
+            'confiscation'=>[
+                'label'=>'罚没',
+                'keywords'=>['罚没']
+            ]
         ]
     ],
     'template' => [

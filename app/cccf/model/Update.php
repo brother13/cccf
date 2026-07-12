@@ -156,9 +156,9 @@ class Update extends Courtcase
 
 
         // 刷新原告被告
-        $sqls[] = "update {$table_shoukuan} set yg=SUBSTRING_INDEX(dsr, ';', 1),bg=SUBSTRING_INDEX(dsr, ';', -1) where dsr is not null and (yg is null or bg is null);";
-        $sqls[] = "update {$table_shoukuan_ye} set yg=SUBSTRING_INDEX(dsr, ';', 1),bg=SUBSTRING_INDEX(dsr, ';', -1) where dsr is not null and (yg is null or bg is null);";
-        $sqls[] = "update {$table_tuikuan} set yg=SUBSTRING_INDEX(dsr, ';', 1),bg=SUBSTRING_INDEX(dsr, ';', -1) where dsr is not null and (yg is null or bg is null);";
+        //$sqls[] = "update {$table_shoukuan} set yg=SUBSTRING_INDEX(dsr, ';', 1),bg=SUBSTRING_INDEX(dsr, ';', -1) where dsr is not null and (yg is null or bg is null);";
+        //$sqls[] = "update {$table_shoukuan_ye} set yg=SUBSTRING_INDEX(dsr, ';', 1),bg=SUBSTRING_INDEX(dsr, ';', -1) where dsr is not null and (yg is null or bg is null);";
+        //$sqls[] = "update {$table_tuikuan} set yg=SUBSTRING_INDEX(dsr, ';', 1),bg=SUBSTRING_INDEX(dsr, ';', -1) where dsr is not null and (yg is null or bg is null);";
 
 
         // 刷新备注信息

@@ -21,6 +21,9 @@ use app\cccf\model\Lixijs;
 use app\cccf\model\Lpr;
 use app\cccf\model\Benchmark;
 use app\cccf\model\Update;
+
+// 拍卖记录
+use app\cccf\model\Pmjl;
 //测试用的
 use app\cccf\model\User;
 use \think\Controller;
@@ -175,6 +178,10 @@ class Index extends Controller
                 $model = new Plugins();
                 $data = $model->index($action_arr[2], $postdata);
                 break;
+            case 'pmjl': // 拍卖记录
+                $model = new Pmjl();
+                $data = $model->index($action_arr[2], $postdata);
+                break;
             default:
                 $rt['message'] = "操作【{$action}】不合法！";
                 return $rt;
@@ -299,5 +306,19 @@ class Index extends Controller
 
 
         return $rt;
+    }
+
+    /**
+     * 保存拍卖记录
+     */
+    public function savePmjl()
+    {
+        $param = input("param.");
+        $data = $param['data'] ?? '';
+        $data = _cv_to_array($data);
+        $data = $data['data'] ?? [];
+
+        $model = new Pmjl();
+        return $model->savedata($data);
     }
 }
