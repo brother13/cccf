@@ -545,6 +545,7 @@ class Data extends Common
         $d['total'] = $num;
         $d['items'] = $data;
         $d['allitems'] = $alldata;
+        $d['cflist_filter_by_username'] = $filterByUsername ? true : false;
         $rt['data'] = $d;
         return $d;
     }
@@ -611,6 +612,7 @@ class Data extends Common
             $d['total'] = 0;
             $d['items'] = [];
             $d['allitems'] = [];
+            $d['cflist_filter_by_username'] = $filterByUsername ? true : false;
             return $d;
         }
 
@@ -685,6 +687,7 @@ class Data extends Common
         $d['total'] = $total;
         $d['items'] = array_slice($caseItems, $offset, $pagesize);
         $d['allitems'] = $alldata;
+        $d['cflist_filter_by_username'] = $filterByUsername ? true : false;
         return $d;
     }
 
