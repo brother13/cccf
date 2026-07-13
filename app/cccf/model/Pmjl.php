@@ -18,6 +18,8 @@ class Pmjl extends Common
     const COMMENT = "拍卖记录";
 
     const TABLE_PMJL = "pmjl";
+    const RULE_ACCESS = "PMTZ";
+    const RULE_QUERY_ALL = "PMTZ_QUERY_ALL";
 
 
 
@@ -33,10 +35,19 @@ class Pmjl extends Common
     {
         $rt = $this->_rt();
 
+        if (in_array($action, ['getList', 'getFilters']) && !$this->checkAuth(self::RULE_ACCESS)) {
+            $rt['message'] = "您没有拍卖台账访问权限";
+            return $rt;
+        }
+
         switch ($action) {
 
             case 'getList':
                 $rt = $this->getList($data);
+                break;
+
+            case 'getFilters':
+                $rt = $this->getFilters();
                 break;
 
             default:
@@ -150,21 +161,33 @@ class Pmjl extends Common
     {
         $rt = $this->_rt();
 
-        $cbr = $param['cbr'] ?? '';
-        $page = $param['page'] ?? 1;
-        $pagesize = $param['pagesize'] ?? 10;
+        $keyword = trim($param['keyword'] ?? '');
+        $status = trim($param['status'] ?? '');
+        $pmjd = trim($param['pmjd'] ?? '');
+        $cbr = trim($param['cbr'] ?? '');
+        $page = max(1, intval($param['page'] ?? 1));
+        $pagesize = max(1, min(100, intval($param['pagesize'] ?? 20)));
 
-        $sort = $param['sort'] ?? '';
+        $canQueryAll = $this->checkAuth(self::RULE_QUERY_ALL);
+        if (!$canQueryAll) {
+            $cbr = $this->username;
+        }
 
         $where = [];
         if (!empty($cbr)) {
             $where['cbr'] = $cbr;
         }
-
-        $order = "id";
-        if (!empty($sort)) {
-            $order = $sort;
+        if (!empty($status)) {
+            $where['status'] = $status;
         }
+        if (!empty($pmjd)) {
+            $where['pmjd'] = $pmjd;
+        }
+        if (!empty($keyword)) {
+            $where['caseinfo|fyname|cbr|status|bdmc|dsr|pmjd|pmpt|qpj|cjj'] = ['like', '%' . $keyword . '%'];
+        }
+
+        $order = "id desc";
         $total = $this->getdb(self::TABLE_PMJL)->where($where)->count();
 
         $data = $this->getdb(self::TABLE_PMJL)->where($where)->order($order)->page($page, $pagesize)->select();
@@ -178,6 +201,48 @@ class Pmjl extends Common
         $rt['message'] = 'OK';
         $rt['total'] = $total;
         $rt['data'] = $newdata;
+
+        return $rt;
+    }
+
+    /**
+     * 获取拍卖台账筛选条件
+     */
+    public function getFilters()
+    {
+        $rt = $this->_rt();
+        $canQueryAll = $this->checkAuth(self::RULE_QUERY_ALL);
+
+        $status = $this->getdb(self::TABLE_PMJL)
+            ->where('status', '<>', '')
+            ->group('status')
+            ->order('status')
+            ->column('status');
+        $pmjd = $this->getdb(self::TABLE_PMJL)
+            ->where('pmjd', '<>', '')
+            ->group('pmjd')
+            ->order('pmjd')
+            ->column('pmjd');
+
+        if ($canQueryAll) {
+            $cbr = $this->getdb('user')
+                ->where(['isvoid' => 0, 'isdel' => 0])
+                ->where('username', '<>', '')
+                ->group('username')
+                ->order('username')
+                ->column('username');
+        } else {
+            $cbr = empty($this->username) ? [] : [$this->username];
+        }
+
+        $rt['code'] = self::CODE_SUCCESS;
+        $rt['message'] = 'OK';
+        $rt['data'] = [
+            'status' => $status,
+            'pmjd' => $pmjd,
+            'cbr' => $cbr,
+            'can_query_all' => $canQueryAll
+        ];
 
         return $rt;
     }
