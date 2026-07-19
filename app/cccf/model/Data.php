@@ -1220,6 +1220,9 @@ class Data extends Common
         foreach ($statusList as $status) {
             $where = [];
             $where['zt'] = $status;
+            if ($status == '继续冻结成功') {
+                $where['ledgerUpdated'] = 0;
+            }
             if (strlen($myusername) > 0) {
                 $where['cbr'] = $myusername;
             }
