@@ -165,6 +165,8 @@ class Pmjl extends Common
         $status = trim($param['status'] ?? '');
         $pmjd = trim($param['pmjd'] ?? '');
         $cbr = trim($param['cbr'] ?? '');
+        $secondAuctionOverdue = isset($param['secondAuctionOverdue'])
+            && in_array($param['secondAuctionOverdue'], [true, 1, '1'], true);
         $page = max(1, intval($param['page'] ?? 1));
         $pagesize = max(1, min(100, intval($param['pagesize'] ?? 20)));
 
@@ -177,11 +179,17 @@ class Pmjl extends Common
         if (!empty($cbr)) {
             $where['cbr'] = $cbr;
         }
-        if (!empty($status)) {
-            $where['status'] = $status;
-        }
-        if (!empty($pmjd)) {
-            $where['pmjd'] = $pmjd;
+        if ($secondAuctionOverdue) {
+            $where['status'] = ['in', ['流拍待确认', '已确认流拍']];
+            $where['pmjd'] = '二拍';
+            $where['pmjssj'] = ['lt', date('Y-m-d H:i:s', strtotime('-7 days'))];
+        } else {
+            if (!empty($status)) {
+                $where['status'] = $status;
+            }
+            if (!empty($pmjd)) {
+                $where['pmjd'] = $pmjd;
+            }
         }
         if (!empty($keyword)) {
             $where['caseinfo|fyname|cbr|status|bdmc|dsr|pmjd|pmpt|qpj|cjj'] = ['like', '%' . $keyword . '%'];
