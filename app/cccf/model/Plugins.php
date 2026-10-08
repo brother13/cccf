@@ -1449,7 +1449,8 @@ class Plugins extends Courtcase
                 GROUP_CONCAT(DISTINCT dsr) AS dsr, MAX(cbbm) AS cbbm,
                 MAX(cbr) AS cbr, MAX(sjy) AS sjy, MAX(yg) AS yg,
                 MAX(bg) AS bg, MAX(ay) AS ay, MAX(yh_zt) AS yh_zt,
-                0 AS tk_je, '' AS czdate, 0 AS ye,
+                CAST(0 AS DECIMAL(40,2)) AS tk_je, '' AS czdate,
+                CAST(0 AS DECIMAL(40,2)) AS ye,
                 '' AS skr, '' AS skr_bank, '' AS skr_account,
                 0 AS workdays, '{$endtime}' AS endtime
             FROM {$table_sk}
@@ -1614,7 +1615,8 @@ class Plugins extends Courtcase
                 GROUP_CONCAT(DISTINCT dsr) AS dsr, MAX(cbbm) AS cbbm,
                 MAX(cbr) AS cbr, MAX(sjy) AS sjy, MAX(yg) AS yg,
                 MAX(bg) AS bg, MAX(ay) AS ay, MAX(yh_zt) AS yh_zt,
-                0 AS tk_je, '' AS czdate, 0 AS ye,
+                CAST(0 AS DECIMAL(40,2)) AS tk_je, '' AS czdate,
+                CAST(0 AS DECIMAL(40,2)) AS ye,
                 '' AS skr, '' AS skr_bank, '' AS skr_account,
                 0 AS workdays, '{$endtime}' AS endtime
             FROM {$table_sk}

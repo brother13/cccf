@@ -167,6 +167,11 @@ class Pmjl extends Common
         $cbr = trim($param['cbr'] ?? '');
         $secondAuctionOverdue = isset($param['secondAuctionOverdue'])
             && in_array($param['secondAuctionOverdue'], [true, 1, '1'], true);
+        $hasViewMode = array_key_exists('viewMode', $param);
+        $viewMode = trim($param['viewMode'] ?? 'asset');
+        if (!in_array($viewMode, ['case', 'asset'], true)) {
+            $viewMode = 'asset';
+        }
         $page = max(1, intval($param['page'] ?? 1));
         $pagesize = max(1, min(100, intval($param['pagesize'] ?? 20)));
 
@@ -195,15 +200,115 @@ class Pmjl extends Common
             $where['caseinfo|fyname|cbr|status|bdmc|dsr|pmjd|pmpt|qpj|cjj'] = ['like', '%' . $keyword . '%'];
         }
 
-        $order = "id desc";
-        $total = $this->getdb(self::TABLE_PMJL)->where($where)->count();
+        if (!$hasViewMode) {
+            $total = $this->getdb(self::TABLE_PMJL)->where($where)->count();
+            $data = $this->getdb(self::TABLE_PMJL)
+                ->where($where)
+                ->order('id desc')
+                ->page($page, $pagesize)
+                ->select();
 
-        $data = $this->getdb(self::TABLE_PMJL)->where($where)->order($order)->page($page, $pagesize)->select();
+            $rt['code'] = self::CODE_SUCCESS;
+            $rt['message'] = 'OK';
+            $rt['total'] = $total;
+            $rt['data'] = [
+                'total' => $total,
+                'items' => $data
+            ];
 
+            return $rt;
+        }
+
+        $allData = $this->getdb(self::TABLE_PMJL)->where($where)->order('id desc')->select();
+        $grouped = [];
+        $announcingTotal = 0;
+        $pendingFailureTotal = 0;
+
+        foreach ($allData as $row) {
+            $caseinfo = trim($row['caseinfo'] ?? '');
+            $caseKey = $caseinfo === '' ? '__empty_case_' . ($row['id'] ?? '') : $caseinfo;
+
+            if (!isset($grouped[$caseKey])) {
+                $grouped[$caseKey] = [
+                    'case_key' => $caseKey,
+                    'caseinfo' => $caseinfo,
+                    'dsr' => $row['dsr'] ?? '',
+                    'cbr' => $row['cbr'] ?? '',
+                    'asset_count' => 0,
+                    'stage_counts' => [],
+                    'status_counts' => [],
+                    'stage_summary' => [],
+                    'status_summary' => [],
+                    'latest_node' => '',
+                    'items' => []
+                ];
+            }
+
+            $stage = trim($row['pmjd'] ?? '');
+            if ($stage !== '') {
+                if (!isset($grouped[$caseKey]['stage_counts'][$stage])) {
+                    $grouped[$caseKey]['stage_counts'][$stage] = 0;
+                }
+                $grouped[$caseKey]['stage_counts'][$stage]++;
+            }
+
+            $rowStatus = trim($row['status'] ?? '');
+            if ($rowStatus !== '') {
+                if (!isset($grouped[$caseKey]['status_counts'][$rowStatus])) {
+                    $grouped[$caseKey]['status_counts'][$rowStatus] = 0;
+                }
+                $grouped[$caseKey]['status_counts'][$rowStatus]++;
+            }
+
+            if ($rowStatus === '公告中') {
+                $announcingTotal++;
+            }
+            if ($rowStatus === '流拍待确认') {
+                $pendingFailureTotal++;
+            }
+
+            $nodeTime = !empty($row['pmjssj']) ? $row['pmjssj'] : ($row['pmkssj'] ?? '');
+            if (!empty($nodeTime)) {
+                $latestNode = $grouped[$caseKey]['latest_node'];
+                if (empty($latestNode) || strtotime($nodeTime) > strtotime($latestNode)) {
+                    $grouped[$caseKey]['latest_node'] = $nodeTime;
+                }
+            }
+
+            $grouped[$caseKey]['asset_count']++;
+            $grouped[$caseKey]['items'][] = $row;
+        }
+
+        $caseItems = array_values($grouped);
+        foreach ($caseItems as &$caseItem) {
+            foreach ($caseItem['stage_counts'] as $name => $count) {
+                $caseItem['stage_summary'][] = ['name' => $name, 'count' => $count];
+            }
+            foreach ($caseItem['status_counts'] as $name => $count) {
+                $caseItem['status_summary'][] = ['name' => $name, 'count' => $count];
+            }
+            unset($caseItem['stage_counts'], $caseItem['status_counts']);
+        }
+        unset($caseItem);
+
+        $assetTotal = count($allData);
+        $caseTotal = count($caseItems);
+        $offset = ($page - 1) * $pagesize;
+        $data = $viewMode === 'case'
+            ? array_slice($caseItems, $offset, $pagesize)
+            : array_slice($allData, $offset, $pagesize);
+        $total = $viewMode === 'case' ? $caseTotal : $assetTotal;
 
         $newdata = [];
         $newdata['total'] = $total;
         $newdata['items'] = $data;
+        $newdata['view_mode'] = $viewMode;
+        $newdata['summary'] = [
+            'case_total' => $caseTotal,
+            'asset_total' => $assetTotal,
+            'announcing_total' => $announcingTotal,
+            'pending_failure_total' => $pendingFailureTotal
+        ];
 
         $rt['code'] = self::CODE_SUCCESS;
         $rt['message'] = 'OK';
